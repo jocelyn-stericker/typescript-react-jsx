@@ -1540,7 +1540,7 @@
         "category": "Error",
         "code": 6053
     },
-    "File '{0}' must have extension '.ts' or '.d.ts'.": {
+    "File '{0}' must have extension '.ts', '.d.ts', or '.tsx'.": {
         "category": "Error",
         "code": 6054
     },
@@ -1612,5 +1612,17 @@
     "You cannot rename this element.": {
         "category": "Error",
         "code": 8000
+    },
+    "Lowercase ReactElements must be builtins": {
+        "category": "Error",
+        "code": 9000
+    },
+    "Hint: '{0}' is expanded to '{1}'": {
+        "category": "Error",
+        "code": 9001
+    },
+    "React 0.12 is required for React.createElement": {
+        "category": "Error",
+        "code": 9002
     }
 }

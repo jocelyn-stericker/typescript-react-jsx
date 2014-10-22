@@ -237,6 +237,7 @@ module ts {
                     child((<IndexedAccess>node).index);
             case SyntaxKind.CallExpression:
             case SyntaxKind.NewExpression:
+            case SyntaxKind.TSXElement:
                 return child((<CallExpression>node).func) ||
                     children((<CallExpression>node).typeArguments) ||
                     children((<CallExpression>node).arguments);
@@ -573,6 +574,7 @@ module ts {
         ArgumentExpressions,     // Expressions in argument list
         ObjectLiteralMembers,    // Members in object literal
         ArrayLiteralMembers,     // Members in array literal
+        TSXLiteralMembers,       // Members in TSX literal
         Parameters,              // Parameters in parameter list
         TypeParameters,          // Type parameters in type parameter list
         TypeArguments,           // Type arguments in type argument list
@@ -1063,6 +1065,8 @@ module ts {
                 case ParsingContext.EnumMembers:
                 case ParsingContext.ObjectLiteralMembers:
                     return isPropertyName();
+                case ParsingContext.TSXLiteralMembers:
+                    return isPropertyName() && !isListTerminator(kind);
                 case ParsingContext.BaseTypeReferences:
                     return isIdentifier() && ((token !== SyntaxKind.ExtendsKeyword && token !== SyntaxKind.ImplementsKeyword) || !lookAhead(() => (nextToken(), isIdentifier())));
                 case ParsingContext.VariableDeclarations:
@@ -1119,6 +1123,8 @@ module ts {
                 case ParsingContext.TypeArguments:
                     // Tokens other than '>' are here for better error recovery
                     return token === SyntaxKind.GreaterThanToken || token === SyntaxKind.OpenParenToken;
+                case ParsingContext.TSXLiteralMembers:
+                    return token === SyntaxKind.TSXChildlessCloseToken || token === SyntaxKind.GreaterThanToken;
             }
         }
 
@@ -1870,6 +1876,7 @@ module ts {
                     case SyntaxKind.IndexedAccess:
                     case SyntaxKind.NewExpression:
                     case SyntaxKind.CallExpression:
+                    case SyntaxKind.TSXElement:
                     case SyntaxKind.ArrayLiteral:
                     case SyntaxKind.ParenExpression:
                     case SyntaxKind.ObjectLiteral:
@@ -2360,6 +2367,12 @@ module ts {
                         return parseLiteralNode();
                     }
                     break;
+                // Augmented by TSX:
+                //
+                //  PrimaryExpression:
+                //      TSXElement
+                case SyntaxKind.TSXOpenToken:
+                    return parseTSXElement();
                 default:
                     if (isIdentifier()) {
                         return parseIdentifier();
@@ -2436,6 +2449,21 @@ module ts {
                 return parseAndCheckMemberAccessorDeclaration(kind, initialPos, 0);
             }
             return parsePropertyAssignment();
+        }
+
+        function parseTSXLiteralMember(): Node {
+            var node = <PropertyDeclaration>createNode(SyntaxKind.PropertyAssignment);
+            node.name = parsePropertyName();
+            parseExpected(SyntaxKind.EqualsToken);
+            if (parseOptional(SyntaxKind.OpenBraceToken)) {
+                // e.g., {42}
+                node.initializer = parseAssignmentExpression(false);
+                parseExpected(SyntaxKind.CloseBraceToken);
+            } else {
+                // e.g., "42"
+                node.initializer = parseStringLiteral();
+            }
+            return finishNode(node);
         }
 
         function parseObjectLiteral(): ObjectLiteral {
@@ -2526,6 +2554,150 @@ module ts {
             node.parameters = sig.parameters;
             node.type = sig.type;
             node.body = body;
+            return finishNode(node);
+        }
+
+        function parseTSXElement(): Expression {
+            var pos = getNodePos();
+            parseExpected(SyntaxKind.TSXOpenToken);
+            var identifier = parseIdentifier();
+            var typeVerbatim = identifier.text; // Does not include anything after a PropertyAccess.
+            var typeRef: Expression = null;
+            if (startsWithLowerCase(typeVerbatim)) {
+                // In TSX (as in JSX), starting with React 0.12 types that start with a lowercase
+                // letter are built-ins (such as "div").
+                if (token === SyntaxKind.DotToken || !ReactBuiltins[typeVerbatim]) {
+                    error(Diagnostics.Lowercase_ReactElements_must_be_builtins);
+                }
+                typeRef = identifier;
+            }
+            else {
+                // In this case, the type is not a built-in. Don't set typeVerbatim.
+                typeVerbatim = null;
+                typeRef = parseCallAndAccess(identifier, false);
+            }
+
+            // Parse the props and children
+            var propsNode: Node = null;
+            var children: NodeArray<Node> = null;
+
+            if (parseOptional(SyntaxKind.OpenBraceToken)) {
+                // Parse spread attributes
+                // { ... AssignmentExpression }
+                parseExpected(SyntaxKind.DotDotDotToken);
+                propsNode = parseAssignmentExpression(false);
+                parseExpected(SyntaxKind.CloseBraceToken);
+            }
+            else if (token !== SyntaxKind.TSXChildlessCloseToken && token !== SyntaxKind.GreaterThanToken) {
+                var props = <NodeArray<Node>>[];
+                props.pos = getNodePos();
+                while (isListElement(ParsingContext.TSXLiteralMembers, /*inErrorRecovery*/ false)) {
+                    props.push(parseTSXLiteralMember());
+                }
+                props.end = getNodeEnd();
+                // If there are no props, prefer null to [].
+                if (props.length) {
+                    var propsLiteral = <ObjectLiteral>createNode(SyntaxKind.ObjectLiteral);
+                    propsLiteral.properties = props;
+                    propsNode = finishNode(propsLiteral);
+                }
+            }
+
+            if (!parseOptional(SyntaxKind.TSXChildlessCloseToken) && parseExpected(SyntaxKind.GreaterThanToken)) {
+                // Parse children
+                while (!parseOptional(SyntaxKind.TSXCloseToken)) {
+                    if (!children) {
+                        children = <NodeArray<Node>>[];
+                    }
+
+                    if (parseOptional(SyntaxKind.OpenBraceToken)) {
+                        var child = tryParse(parseAssignmentExpression);
+                        if (child) {
+                            children.push(child);
+                        } // TODO: Do we emit anything otherwise?
+                        parseExpected(SyntaxKind.CloseBraceToken);
+                    }
+                    else if (token === SyntaxKind.TSXOpenToken) {
+                        children.push(parseTSXElement());
+                    }
+                    else {
+                        var firstPos = scanner.getStartPos();
+                        var xjs = scanner.scanXJS();
+                        var xjsNode = <LiteralExpression>createNode(SyntaxKind.XJSLiteral);
+                        xjsNode.text = xjs;
+                        children.push(xjsNode);
+                        xjsNode.pos = firstPos;
+                        nextToken();
+                        xjsNode = finishNode(xjsNode);
+                        if (xjsNode.pos === xjsNode.end) {
+                            break;
+                        }
+                    }
+                }
+                var closeRef = parseTypeReference();
+                // TODO: verify closeRef is the same as typeRef!!
+                parseExpected(SyntaxKind.GreaterThanToken);
+            }
+
+            if (!propsNode) {
+                propsNode = finishNode(createNode(SyntaxKind.NullKeyword));
+            }
+            propsNode.flags |= parseAndCheckModifiers(ModifierContext.Parameters);
+
+            var ret = makeTSXElement(pos, makeTSXArguments(typeVerbatim, typeRef, propsNode, children));
+            return ret;
+        }
+
+        function makeTSXArguments(typeVerbatim: string, typeRef: Expression, propsNode: Node, children: NodeArray<Node>): NodeArray<ParameterDeclaration> {
+            var typeNode: Node;
+            if (typeVerbatim) {
+                var typeLiteral = <LiteralExpression>createNode(SyntaxKind.TSXQuotedLiteral);
+                typeLiteral.pos = typeRef.pos;
+                typeLiteral.end = typeRef.pos + typeVerbatim.length;
+                typeLiteral.text = internIdentifier(typeVerbatim);
+                typeNode = typeLiteral;
+            } else {
+                typeNode = typeRef;
+            }
+            typeNode.flags |= parseAndCheckModifiers(ModifierContext.Parameters);
+
+            var arguments = <NodeArray<ParameterDeclaration>>[];
+            arguments.push(typeNode);
+            arguments.push(propsNode);
+            if (children) {
+                for (var i = 0; i < children.length; ++i) {
+                    arguments.push(children[i]);
+                }
+            }
+            arguments.pos = typeNode.pos;
+            arguments.end = typeNode.end;
+
+            return arguments;
+        }
+
+        function startsWithLowerCase(str: string): boolean {
+            return str[0] && str[0] === str[0].toLowerCase() && str[0] !== str[0].toUpperCase();
+        }
+
+        function makeTSXElement(pos: number, sig: NodeArray<ParameterDeclaration>): TSXElement {
+            var node = <TSXElement>createNode(SyntaxKind.TSXElement, pos);
+
+            var reactId = <Identifier>createNode(SyntaxKind.Identifier);
+            reactId.text = internIdentifier(escapeIdentifier("React"));
+            reactId.pos = pos;
+
+            var createElementId = <Identifier>createNode(SyntaxKind.Identifier);
+            createElementId.text = internIdentifier(escapeIdentifier("createElement"));
+            createElementId.pos = pos;
+
+            var propertyAccess = <PropertyAccess>createNode(SyntaxKind.PropertyAccess, node.pos);
+            propertyAccess.left = finishNode(reactId);
+            propertyAccess.right = finishNode(createElementId);
+            propertyAccess.parent = node;
+            propertyAccess.pos = pos;
+
+            node.arguments = sig;
+            node.func = finishNode(propertyAccess);
             return finishNode(node);
         }
 
@@ -3942,8 +4114,8 @@ module ts {
             }
             var diagnostic: DiagnosticMessage;
             if (hasExtension(filename)) {
-                if (!fileExtensionIs(filename, ".ts")) {
-                    diagnostic = Diagnostics.File_0_must_have_extension_ts_or_d_ts;
+                if (!fileExtensionIs(filename, ".ts") && !fileExtensionIs(filename, ".tsx")) {
+                    diagnostic = Diagnostics.File_0_must_have_extension_ts_d_ts_or_tsx;
                 }
                 else if (!findSourceFile(filename, isDefaultLib, refFile, refPos, refEnd)) {
                     diagnostic = Diagnostics.File_0_not_found;
@@ -3953,10 +4125,13 @@ module ts {
                 }
             }
             else {
-                if (!(findSourceFile(filename + ".ts", isDefaultLib, refFile, refPos, refEnd) || findSourceFile(filename + ".d.ts", isDefaultLib, refFile, refPos, refEnd))) {
-                    diagnostic = Diagnostics.File_0_not_found;
-                    filename += ".ts";
-                }
+                var extensions = [".ts", ".tsx"];
+                extensions.forEach(ext => {
+                    if (!(findSourceFile(filename + ext, isDefaultLib, refFile, refPos, refEnd) || findSourceFile(filename + ".d.ts", isDefaultLib, refFile, refPos, refEnd))) {
+                        diagnostic = Diagnostics.File_0_not_found;
+                        filename += ext;
+                    }
+                })
             }
 
             if (diagnostic) {

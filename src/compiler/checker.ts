@@ -4031,6 +4031,7 @@ module ts {
                 case SyntaxKind.ReturnStatement:
                     return getContextualTypeForReturnExpression(node);
                 case SyntaxKind.CallExpression:
+                case SyntaxKind.TSXElement:
                 case SyntaxKind.NewExpression:
                     return getContextualTypeForArgument(node);
                 case SyntaxKind.TypeAssertion:
@@ -4215,7 +4216,12 @@ module ts {
                 var prop = getPropertyOfApparentType(apparentType, node.right.text);
                 if (!prop) {
                     if (node.right.text) {
-                        error(node.right, Diagnostics.Property_0_does_not_exist_on_type_1, identifierToString(node.right), typeToString(type));
+                        if (node.right.text === "createElement") {
+                            // HACK: Lets just hope createElement is React.createElement
+                            error(node, Diagnostics.React_0_12_is_required_for_React_createElement);
+                        } else {
+                            error(node.right, Diagnostics.Property_0_does_not_exist_on_type_1, identifierToString(node.right), typeToString(type));
+                        }
                     }
                     return unknownType;
                 }
@@ -4381,13 +4387,13 @@ module ts {
             return getSignatureInstantiation(signature, getInferredTypes(context));
         }
 
-        function inferTypeArguments(signature: Signature, args: Expression[], excludeArgument?: boolean[]): Type[] {
+        function inferTypeArguments(signature: Signature, args: Expression[], excludeArgument?: boolean[], tsxHack?: boolean): Type[] {
             var typeParameters = signature.typeParameters;
             var context = createInferenceContext(typeParameters);
             var mapper = createInferenceMapper(context);
             // First infer from arguments that are not context sensitive
             for (var i = 0; i < args.length; i++) {
-                if (args[i].kind === SyntaxKind.OmittedExpression) {
+                if (args[i].kind === SyntaxKind.OmittedExpression || tsxHack && i === 1) {
                     continue;
                 }
                 if (!excludeArgument || excludeArgument[i] === undefined) {
@@ -4398,7 +4404,7 @@ module ts {
             // Next, infer from those context sensitive arguments that are no longer excluded
             if (excludeArgument) {
                 for (var i = 0; i < args.length; i++) {
-                    if (args[i].kind === SyntaxKind.OmittedExpression) {
+                    if (args[i].kind === SyntaxKind.OmittedExpression || tsxHack && i === 1) {
                         continue;
                     }
                     if (excludeArgument[i] === false) {
@@ -4408,6 +4414,20 @@ module ts {
                 }
             }
             return getInferredTypes(context);
+        }
+
+        function checkTypeArgumentsTSX(signature: Signature, resolvedType: Type[]): Type[] {
+            var typeParameters = signature.typeParameters;
+            var result: Type[] = [];
+            for (var i = 0; i < typeParameters.length; i++) {
+                var typeArgument = resolvedType[i];
+                var constraint = getConstraintOfTypeParameter(typeParameters[i]);
+                if (constraint && fullTypeCheck) {
+                    checkTypeAssignableTo(typeArgument, constraint, null, Diagnostics.Type_0_does_not_satisfy_the_constraint_1_Colon, Diagnostics.Type_0_does_not_satisfy_the_constraint_1);
+                }
+                result.push(typeArgument);
+            }
+            return result;
         }
 
         function checkTypeArguments(signature: Signature, typeArguments: TypeNode[]): Type[] {
@@ -4477,9 +4497,21 @@ module ts {
                     while (true) {
                         var candidateWithCorrectArity = candidates[i];
                         if (candidateWithCorrectArity.typeParameters) {
-                            var typeArguments = node.typeArguments ?
-                                checkTypeArguments(candidateWithCorrectArity, node.typeArguments) :
-                                inferTypeArguments(candidateWithCorrectArity, args, excludeArgument);
+                            if (node.kind === SyntaxKind.TSXElement) {
+                                var typeArguments = inferTypeArguments(candidateWithCorrectArity, args,
+                                            excludeArgument, node.kind === SyntaxKind.TSXElement);
+                                var typeArgumentsOther = inferTypeArguments(candidateWithCorrectArity, args,
+                                            excludeArgument);
+                                for (var i = 0; i < typeArguments.length; ++i) {
+                                    checkTypeAssignableTo(typeArgumentsOther[i], typeArguments[i], node,
+                                        Diagnostics.Supplied_parameters_do_not_match_any_signature_of_call_target,
+                                        /*terminalMessage*/ undefined);
+                                }
+                            } else {
+                                var typeArguments = node.typeArguments ?
+                                    checkTypeArguments(candidateWithCorrectArity, node.typeArguments) :
+                                    inferTypeArguments(candidateWithCorrectArity, args, excludeArgument);
+                            }
                             candidateWithCorrectArity = getSignatureInstantiation(candidateWithCorrectArity, typeArguments);
                         }
                         if (!checkApplicableSignature(node, candidateWithCorrectArity, relation, excludeArgument, /*reportErrors*/ false)) {
@@ -4689,11 +4721,23 @@ module ts {
             // to correctly fill the candidatesOutArray.
             if (!links.resolvedSignature || candidatesOutArray) {
                 links.resolvedSignature = anySignature;
-                links.resolvedSignature = node.kind === SyntaxKind.CallExpression
+                links.resolvedSignature = node.kind === SyntaxKind.CallExpression ||
+                        node.kind == SyntaxKind.TSXElement
                     ? resolveCallExpression(node, candidatesOutArray)
                     : resolveNewExpression(node, candidatesOutArray);
             }
             return links.resolvedSignature;
+        }
+
+        function checkReactIsAvailable(node: TSXElement): boolean {
+            var react = resolveName(node, "React", SymbolFlags.Module, Diagnostics.Cannot_find_name_0, "React");
+            if (!react) {
+                // TODO: Actually put the element name in the error message.
+                error(node, Diagnostics.Hint_Colon_0_is_expanded_to_1, "<!Element...", "React.createElement(Element, ...");
+                return false;
+            }
+
+            return true;
         }
 
         function checkCallExpression(node: CallExpression): Type {
@@ -5252,6 +5296,7 @@ module ts {
                 case SyntaxKind.NumericLiteral:
                     return numberType;
                 case SyntaxKind.StringLiteral:
+                case SyntaxKind.TSXQuotedLiteral:
                     return stringType;
                 case SyntaxKind.RegularExpressionLiteral:
                     return globalRegExpType;
@@ -5265,6 +5310,11 @@ module ts {
                     return checkPropertyAccess(<PropertyAccess>node);
                 case SyntaxKind.IndexedAccess:
                     return checkIndexedAccess(<IndexedAccess>node);
+                case SyntaxKind.TSXElement:
+                    if (!checkReactIsAvailable(<TSXElement>node)) {
+                        return unknownType;
+                    }
+                    // passthrough
                 case SyntaxKind.CallExpression:
                 case SyntaxKind.NewExpression:
                     return checkCallExpression(<CallExpression>node);
@@ -6957,6 +7007,7 @@ module ts {
                 case SyntaxKind.PropertyAccess:
                 case SyntaxKind.IndexedAccess:
                 case SyntaxKind.CallExpression:
+                case SyntaxKind.TSXElement:
                 case SyntaxKind.NewExpression:
                 case SyntaxKind.TypeAssertion:
                 case SyntaxKind.ParenExpression:
@@ -7187,6 +7238,7 @@ module ts {
                 case SyntaxKind.PropertyAccess:
                 case SyntaxKind.IndexedAccess:
                 case SyntaxKind.CallExpression:
+                case SyntaxKind.TSXElement:
                 case SyntaxKind.NewExpression:
                 case SyntaxKind.TypeAssertion:
                 case SyntaxKind.ParenExpression:
@@ -7308,6 +7360,8 @@ module ts {
                             return node === (<SignatureDeclaration>parent).type;
                         case SyntaxKind.TypeAssertion:
                             return node === (<TypeAssertion>parent).type;
+                        case SyntaxKind.TSXElement:
+                            return true;
                         case SyntaxKind.CallExpression:
                         case SyntaxKind.NewExpression:
                             return (<CallExpression>parent).typeArguments && (<CallExpression>parent).typeArguments.indexOf(node) >= 0;

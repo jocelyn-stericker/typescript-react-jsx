@@ -1679,6 +1679,12 @@ module ts {
                 return startPos + tokenString.length;
             }
 
+            function emitTSXElement(node: TSXElement) {
+                write("React.createElement(");
+                emitCommaList(node.arguments, false);
+                write(")");
+            }
+
             function emitOptional(prefix: string, node: Node) {
                 if (node) {
                     write(prefix);
@@ -1741,19 +1747,29 @@ module ts {
             }
 
             function emitLiteral(node: LiteralExpression) {
+                if (node.kind === SyntaxKind.XJSLiteral) {
+                    write(node.text);
+                    return;
+                }
                 var text = getSourceTextOfLocalNode(currentSourceFile, node);
-                if (node.kind === SyntaxKind.StringLiteral && compilerOptions.sourceMap) {
+                if (node.kind === SyntaxKind.TSXQuotedLiteral) {
+                    write("\"");
+                }
+                if ((node.kind === SyntaxKind.StringLiteral || node.kind === SyntaxKind.TSXQuotedLiteral) && compilerOptions.sourceMap) {
                     writer.writeLiteral(text);
                 }
                 else {
                     write(text);
+                }
+                if (node.kind === SyntaxKind.TSXQuotedLiteral) {
+                    write("\"");
                 }
             }
 
             // This function specifically handles numeric/string literals for enum and accessor 'identifiers'.
             // In a sense, it does not actually emit identifiers as much as it declares a name for a specific property.
             function emitQuotedIdentifier(node: Identifier) {
-                if (node.kind === SyntaxKind.StringLiteral) {
+                if (node.kind === SyntaxKind.StringLiteral || node.kind === SyntaxKind.TSXQuotedLiteral) {
                     emitLiteral(node);
                 }
                 else {
@@ -3016,6 +3032,8 @@ module ts {
                     case SyntaxKind.NumericLiteral:
                     case SyntaxKind.StringLiteral:
                     case SyntaxKind.RegularExpressionLiteral:
+                    case SyntaxKind.TSXQuotedLiteral:
+                    case SyntaxKind.XJSLiteral:
                         return emitLiteral(<LiteralExpression>node);
                     case SyntaxKind.QualifiedName:
                         return emitPropertyAccess(<QualifiedName>node);
@@ -3041,6 +3059,8 @@ module ts {
                     case SyntaxKind.FunctionExpression:
                     case SyntaxKind.ArrowFunction:
                         return emitFunctionDeclaration(<FunctionDeclaration>node);
+                    case SyntaxKind.TSXElement:
+                        return emitTSXElement(<TSXElement>node);
                     case SyntaxKind.PrefixOperator:
                     case SyntaxKind.PostfixOperator:
                         return emitUnaryExpression(<UnaryExpression>node);

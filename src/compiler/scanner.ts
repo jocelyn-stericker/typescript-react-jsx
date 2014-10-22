@@ -25,6 +25,7 @@ module ts {
         reScanGreaterToken(): SyntaxKind;
         reScanSlashToken(): SyntaxKind;
         scan(): SyntaxKind;
+        scanXJS(): string;
         setText(text: string): void;
         setTextPos(textPos: number): void;
         tryScan<T>(callback: () => T): T;
@@ -115,6 +116,9 @@ module ts {
         "<<": SyntaxKind.LessThanLessThanToken,
         ">>": SyntaxKind.GreaterThanGreaterThanToken,
         ">>>": SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
+        "<!": SyntaxKind.TSXOpenToken,
+        "/>": SyntaxKind.TSXChildlessCloseToken,
+        "</": SyntaxKind.TSXCloseToken,
         "&": SyntaxKind.AmpersandToken,
         "|": SyntaxKind.BarToken,
         "^": SyntaxKind.CaretToken,
@@ -846,6 +850,10 @@ module ts {
                             return pos += 2, token = SyntaxKind.SlashEqualsToken;
                         }
 
+                        if (text.charCodeAt(pos + 1) === CharacterCodes.greaterThan) {
+                            return pos += 2, token = SyntaxKind.TSXChildlessCloseToken;
+                        }
+
                         return pos++, token = SyntaxKind.SlashToken;
 
                     case CharacterCodes._0:
@@ -891,6 +899,12 @@ module ts {
                         }
                         if (text.charCodeAt(pos + 1) === CharacterCodes.equals) {
                             return pos += 2, token = SyntaxKind.LessThanEqualsToken;
+                        }
+                        if (text.charCodeAt(pos + 1) === CharacterCodes.exclamation) {
+                            return pos += 2, token = SyntaxKind.TSXOpenToken;
+                        }
+                        if (text.charCodeAt(pos + 1) === CharacterCodes.slash) {
+                            return pos += 2, token = SyntaxKind.TSXCloseToken;
                         }
                         return pos++, token = SyntaxKind.LessThanToken;
                     case CharacterCodes.equals:
@@ -963,6 +977,67 @@ module ts {
                         return pos++, token = SyntaxKind.Unknown;
                 }
             }
+        }
+
+        function scanXJS(): string {
+            pos = startPos;
+            var xjs = text[pos];
+            var startXJS = pos;
+            while (text[pos] && text[pos] !== "<" && text[pos] !== "{") {
+                pos++;
+            }
+            startPos = tokenPos = pos;
+            return renderXJSLiteral(text.slice(startXJS, pos));
+        }
+
+        function renderXJSLiteral(input: string): string {
+            var lines = input.split(/\r\n|\n|\r/);
+            var output: Array<string> = [];
+
+            var lastNonEmptyLine = 0;
+
+            lines.forEach(function (line, index) {
+                if (line.match(/[^ \t]/)) {
+                    lastNonEmptyLine = index;
+                }
+            });
+
+            lines.forEach(function (line, index) {
+                var isFirstLine = index === 0;
+                var isLastLine = index === lines.length - 1;
+                var isLastNonEmptyLine = index === lastNonEmptyLine;
+
+                // replace rendered whitespace tabs with spaces
+                var trimmedLine = line.replace(/\t/g, ' ');
+
+                // trim whitespace touching a newline
+                if (!isFirstLine) {
+                    trimmedLine = trimmedLine.replace(/^[ ]+/, '');
+                }
+                if (!isLastLine) {
+                    trimmedLine = trimmedLine.replace(/[ ]+$/, '');
+                }
+
+                if (!isFirstLine) {
+                    output.push(line.match(/^[ \t]*/)[0]);
+                }
+
+                if (trimmedLine || isLastNonEmptyLine) {
+                    output.push(
+                            JSON.stringify(trimmedLine) +
+                            (!isLastNonEmptyLine ? " + ' ' +" : ''));
+
+                    // only restore tail whitespace if line had literals
+                    if (trimmedLine && !isLastLine) {
+                        output.push(line.match(/[ \t]*$/)[0]);
+                    }
+                }
+
+                if (!isLastLine) {
+                    output.push('\n');
+                }
+            });
+            return output.join("");
         }
 
         function reScanGreaterToken(): SyntaxKind {
@@ -1086,6 +1161,7 @@ module ts {
             reScanGreaterToken: reScanGreaterToken,
             reScanSlashToken: reScanSlashToken,
             scan: scan,
+            scanXJS: scanXJS,
             setText: setText,
             setTextPos: setTextPos,
             tryScan: tryScan

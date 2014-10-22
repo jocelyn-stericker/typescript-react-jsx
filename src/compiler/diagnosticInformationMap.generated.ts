@@ -386,7 +386,7 @@ module ts {
         Corrupted_locale_file_0: { code: 6051, category: DiagnosticCategory.Error, key: "Corrupted locale file {0}." },
         Warn_on_expressions_and_declarations_with_an_implied_any_type: { code: 6052, category: DiagnosticCategory.Message, key: "Warn on expressions and declarations with an implied 'any' type." },
         File_0_not_found: { code: 6053, category: DiagnosticCategory.Error, key: "File '{0}' not found." },
-        File_0_must_have_extension_ts_or_d_ts: { code: 6054, category: DiagnosticCategory.Error, key: "File '{0}' must have extension '.ts' or '.d.ts'." },
+        File_0_must_have_extension_ts_d_ts_or_tsx: { code: 6054, category: DiagnosticCategory.Error, key: "File '{0}' must have extension '.ts', '.d.ts', or '.tsx'." },
         Variable_0_implicitly_has_an_1_type: { code: 7005, category: DiagnosticCategory.Error, key: "Variable '{0}' implicitly has an '{1}' type." },
         Parameter_0_implicitly_has_an_1_type: { code: 7006, category: DiagnosticCategory.Error, key: "Parameter '{0}' implicitly has an '{1}' type." },
         Member_0_implicitly_has_an_1_type: { code: 7008, category: DiagnosticCategory.Error, key: "Member '{0}' implicitly has an '{1}' type." },
@@ -404,5 +404,8 @@ module ts {
         _0_implicitly_has_return_type_any_because_it_does_not_have_a_return_type_annotation_and_is_referenced_directly_or_indirectly_in_one_of_its_return_expressions: { code: 7023, category: DiagnosticCategory.Error, key: "'{0}' implicitly has return type 'any' because it does not have a return type annotation and is referenced directly or indirectly in one of its return expressions." },
         Function_implicitly_has_return_type_any_because_it_does_not_have_a_return_type_annotation_and_is_referenced_directly_or_indirectly_in_one_of_its_return_expressions: { code: 7024, category: DiagnosticCategory.Error, key: "Function implicitly has return type 'any' because it does not have a return type annotation and is referenced directly or indirectly in one of its return expressions." },
         You_cannot_rename_this_element: { code: 8000, category: DiagnosticCategory.Error, key: "You cannot rename this element." },
+        Lowercase_ReactElements_must_be_builtins: { code: 9000, category: DiagnosticCategory.Error, key: "Lowercase ReactElements must be builtins" },
+        Hint_Colon_0_is_expanded_to_1: { code: 9001, category: DiagnosticCategory.Error, key: "Hint: '{0}' is expanded to '{1}'" },
+        React_0_12_is_required_for_React_createElement: { code: 9002, category: DiagnosticCategory.Error, key: "React 0.12 is required for React.createElement" },
     };
 }

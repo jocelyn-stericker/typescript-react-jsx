@@ -1,78 +1,117 @@
-[![Build Status](https://travis-ci.org/Microsoft/TypeScript.svg?branch=master)](https://travis-ci.org/Microsoft/TypeScript)
-[![Issue Stats](http://issuestats.com/github/Microsoft/TypeScript/badge/pr)](http://issuestats.com/github/microsoft/typescript)
-[![Issue Stats](http://issuestats.com/github/Microsoft/TypeScript/badge/issue)](http://issuestats.com/github/microsoft/typescript)
+# TypeScript with React JSX
 
-# TypeScript
+TypeScript with React JSX is a modified version of the [TypeScript](https://github.com/Microsoft/TypeScript) compiler and language services. TypeScript is a language for application-scale JavaScript. The React JSX patch adds JSX-style syntax to make writing typed [React](https://github.com/facebook/react) applications fun and easy.
 
-[TypeScript](http://www.typescriptlang.org/) is a language for application-scale JavaScript. TypeScript adds optional types, classes, and modules to JavaScript. TypeScript supports tools for large-scale JavaScript applications for any browser, for any host, on any OS. TypeScript compiles to readable, standards-based JavaScript. Try it out at the [playground](http://www.typescriptlang.org/Playground), and stay up to date via [our blog](http://blogs.msdn.com/typescript) and [twitter account](https://twitter.com/typescriptlang).
+> This repo is based on Microsoft's fast, new, completely rewritten, TypeScript compiler. The new compiler and language services aren't supported everywhere the old compiler is yet. For example, you can't use this version for IntilliSense in Visual Studio, and there isn't any easy way of incorporating TypeScript files in your gulp/browserify setup yet. You'll likely be able to do all these things shortly after you can with the unpatched compiler.
 
-
-## Contribute
-
-There are many ways to [contribute](https://github.com/Microsoft/TypeScript/blob/master/CONTRIBUTING.md) to TypeScript.
-* [Submit bugs](https://github.com/Microsoft/TypeScript/issues) and help us verify fixes as they are checked in.
-* Review the [source code changes](https://github.com/Microsoft/TypeScript/pulls).
-* Engage with other TypeScript users and developers on [StackOverflow](http://stackoverflow.com/questions/tagged/typescript). 
-* Join the [#typescript](http://twitter.com/#!/search/realtime/%23typescript) discussion on Twitter.
-* [Contribute bug fixes](https://github.com/Microsoft/TypeScript/blob/master/CONTRIBUTING.md).
-* Read the language specification ([docx](http://go.microsoft.com/fwlink/?LinkId=267121), [pdf](http://go.microsoft.com/fwlink/?LinkId=267238)).
-
-
-## Documentation
-
-*  [Quick tutorial](http://www.typescriptlang.org/Tutorial)
-*  [Programming handbook](http://www.typescriptlang.org/Handbook)
-*  [Language specification](https://github.com/Microsoft/TypeScript/blob/master/doc/spec.md)
-*  [Homepage](http://www.typescriptlang.org/)
-
-## Building
-
-In order to build the TypeScript compiler, ensure that you have [Git](http://git-scm.com/downloads) and [Node.js](http://nodejs.org/) installed.
-
-Clone a copy of the repo:
-
-```
-git clone https://github.com/Microsoft/TypeScript.git
-```
-
-Change to the TypeScript directory:
-
-```
-cd TypeScript
-```
-
-Install Jake tools and dev dependencies:
-
-```
-npm install -g jake
-npm install
-```
-
-Use one of the following to build and test:
-
-```
-jake local            # Build the compiler into built/local 
-jake clean            # Delete the built compiler 
-jake LKG              # Replace the last known good with the built one.
-                      # Bootstrapping step to be executed when the built compiler reaches a stable state.
-jake tests            # Build the test infrastructure using the built compiler. 
-jake runtests         # Run tests using the built compiler and test infrastructure. 
-                      # You can override the host or specify a test for this command. 
-                      # Use host=<hostName> or tests=<testPath>. 
-jake runtests-browser # Runs the tests using the built run.js file. Syntax is jake runtests. Optional
-                        parameters 'host=', 'tests=[regex], reporter=[list|spec|json|<more>]'.
-jake baseline-accept  # This replaces the baseline test results with the results obtained from jake runtests. 
-jake -T               # List the above commands. 
-```
-
+<br />
+> This repo is not yet ready for prime time. Please feel free to pick apart my code and send me PRs.
 
 ## Usage
 
-```shell
-node built/local/tsc.js hello.ts
+Basic usage [isn't changed](https://github.com/Microsoft/TypeScript). Use `node ./bin/tsc.js` to transpile your TypeScript files.
+
+This patch is designed with Asana's [Typed React](https://github.com/Asana/typed-react) in mind, but you may be able to use this with the other React **0.12** binding layers that may appear. The only requirement is that `React.createElement` is defined where you use JSX tags.
+
+Here's an example component, `helloWorld.ts`:
+```
+/// <reference path="react.d.ts" />
+import React = require("react");
+import TypedReact = require("typed-react");
+
+class HelloWorld extends TypedReact.Component<HelloWorld.IProps, {}> {
+    props: HelloWorld.IProps;
+    state: {};
+    render() {
+        return <!div>Hello, {this.props.name}</div>;
+    }
+}
+
+module HelloWorld {
+    export interface IProps {
+        name?: string;
+    }
+    export var Component = TypedReact.createClass(React.createClass, HelloWorld);
+}
+
+export = HelloWorld;
 ```
 
+And then you can use it in `main.ts`,
+```
+/// <reference path="react.d.ts" />
+import HelloWorld = require("./helloWorld");
 
-## Roadmap
+React.render(<!HelloWorld.Component name="Josh" />, document.body);
+```
 
-For details on our planned features and future direction please refer to our [roadmap](https://github.com/Microsoft/TypeScript/wiki/Roadmap).
+### Keep in Mind
+1. The syntax to use a component is `<!Component />`. The extra exclamation mark is used to avoid any
+   ambiguity between type conversions and JSX-style syntax. There's not necessarily any ambiguity from
+   the compiler's perspective, but the extra exclamation mark helps make code quicker to read, and allows
+   for smarter language services (when the new compiler supports them).
+
+2. User-defined components **must** start with an uppercase letter. Built-ins (like `div`) **must** start with
+   a lower-case letter. This is a restriction put in place in JSX starting in React 0.12, and this repo
+   maintains that restriction.
+
+3. Third-party React libraries will work just like you may expect. You can't, however, just use TypeScript
+   classes directly (this is planned for React 0.13). You instead need to use components created with
+   `TypedReact.createClass`. The example above uses a pattern which will be easy to improve once React
+   0.13 is released.
+
+4. There's no reason to use ReactElement **factories** if you're using JSX.
+
+5. If a spread attribute is used, no other attributes can be used.
+
+## Contributing, building, etc.
+
+See [the parent repo](https://github.com/Microsoft/TypeScript). Please do submit pull requests!
+
+## Formal Spec
+The extra syntax added to TypeScript is almost exactly what [JSX adds to ECMAScript](https://facebook.github.io/jsx/).
+
+PrimaryExpression: (see ECMAScript 6 spec)
+* TSXElement
+
+TSXElement
+* TSXChildlessElement
+* TSXOpeningElement TSXChildren? TSXClosingElement
+
+TSXChildlessElement
+* `<!` TSXElementName TSXAttributes? `/>`
+
+TSXOpeningElement
+* `<!` TSXElementName TSXAttributes? `>`
+
+TSXClosingElement
+* `</` TSXElementName `>`
+
+TSXElementName
+* [JSXIdentifier](https://facebook.github.io/jsx/) (without dashes)
+* MemberExpression
+
+TSXAttributes?
+* (can be empty)
+* TSXSpreadAttribute
+* TSXAttribute? TSXAttributes?
+
+TSXSpreadAttribute
+* `{` `...` AssignmentExpression `}`
+
+TSXAttribute?
+* (can be empty)
+* [JSXIdentifier](https://facebook.github.io/jsx/) (not Namespaced) `=` TSXAttributeValue
+
+TSXAttributeValue
+* `"` [JSXDoubleStringCharacter?](https://facebook.github.io/jsx/) `"`
+* `{` AssignmentExpression `}`
+
+TSXChildren?
+* (can be empty)
+* TSXChild TSXChildren?
+
+TSXChild
+* [JSXText](https://facebook.github.io/jsx/)
+* TSXElement
+* `{` AssignmentExpression `}`
