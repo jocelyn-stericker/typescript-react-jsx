@@ -1,6 +1,6 @@
 # TypeScript with React JSX
 
-TypeScript with React JSX is a modified version of the [TypeScript](https://github.com/Microsoft/TypeScript) compiler and language services. To avoid ambiguity with the casting operator, instead of `<Component />, the syntax is `<!Component />`. This makes reading code easier, and will make autocompletion smarter.
+TypeScript with React JSX is a modified version of the [TypeScript](https://github.com/Microsoft/TypeScript) compiler and language services. To avoid ambiguity with the casting operator, instead of `<Component />`, the syntax is `<!Component />`. This makes reading code easier, and will make autocompletion smarter.
 
 > **Current status**: Currently based on [TypeScript 1.3](https://github.com/Microsoft/TypeScript). Basic usage, including type checking, works. Can be integrated into Visual Studio 2015 and gulp. *IntelliSense and syntax highlighting don't work.*
 
