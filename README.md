@@ -1,8 +1,10 @@
 # TypeScript with React JSX
 
+> There are now better options available. **Consider using [jsx-typescript](https://github.com/fdecampredon/jsx-typescript) instead.**
+
 TypeScript with React JSX is a modified version of the [TypeScript](https://github.com/Microsoft/TypeScript) compiler and language services. To avoid ambiguity with the casting operator, instead of `<Component />`, the syntax is `<!Component />`. This makes reading code easier, and will make autocompletion smarter.
 
-> **Current status**: Currently based on [TypeScript 1.3](https://github.com/Microsoft/TypeScript). Basic usage, including type checking, works. Can be integrated into Visual Studio 2015 and gulp. *IntelliSense and syntax highlighting don't work.*
+Currently based on [TypeScript 1.3](https://github.com/Microsoft/TypeScript). Basic usage, including type checking, works. Can be integrated into Visual Studio 2015 and gulp. *IntelliSense and syntax highlighting don't work.*
 
 ## Using Typescript with React JSX
 You can use this anywhere you can use TypeScript 1.3. The CLI, Visual Studio 2015, and gulp are supported. [Typed React](https://github.com/Asana/typed-react) is required.
