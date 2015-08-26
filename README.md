@@ -1,6 +1,6 @@
 # TypeScript with React JSX
 
-> This repo is no longer needed because JSX is built into TypeScript 1.6/1.7. Yay! To get it, `npm install -g typescript@next` and to use it, set `"jsx": "react"` in your `tsconf.json`.
+> This repo is no longer needed because JSX is built into TypeScript 1.6/1.7! To get it, `npm install -g typescript@next` and to use it, set `"jsx": "react"` in your `tsconf.json`.
 
 TypeScript with React JSX is a modified version of the [TypeScript](https://github.com/Microsoft/TypeScript) compiler and language services. To avoid ambiguity with the casting operator, instead of `<Component />`, the syntax is `<!Component />`. This makes reading code easier, and will make autocompletion smarter.
 
